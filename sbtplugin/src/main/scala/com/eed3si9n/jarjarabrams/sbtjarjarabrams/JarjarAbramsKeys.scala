@@ -10,8 +10,8 @@ trait JarjarAbramsKeys {
 object JarjarAbramsKeys extends JarjarAbramsKeys
 
 trait JarjarAbramsInternalKeys {
-  lazy val jarjarPackageBin = taskKey[File]("")
-  lazy val jarjarPackageBinMappings = taskKey[Seq[(File, String)]]("")
+  lazy val jarjarPackageBin = taskKey[xsbti.HashedVirtualFileRef]("")
+  lazy val jarjarPackageBinMappings = taskKey[Seq[(xsbti.HashedVirtualFileRef, String)]]("")
   lazy val jarjarInputJar = taskKey[File]("")
 }
 object JarjarAbramsInternalKeys extends JarjarAbramsInternalKeys

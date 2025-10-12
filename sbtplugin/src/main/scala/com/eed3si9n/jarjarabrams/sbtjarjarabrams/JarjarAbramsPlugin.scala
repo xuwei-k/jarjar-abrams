@@ -82,7 +82,6 @@ object JarjarAbramsPlugin extends AutoPlugin {
         import sbt.util.CacheImplicits._
         val s = streams.value
         val input = jarjarInputJar.value
-        val prev = jarjarPackageBinMappings.previous
         val dir = (jarjarPackageBin / target).value
         val rules = jarjarShadeRules.value
         val verbose = (jarjarPackageBin / logLevel).value == sbt.Level.Debug
@@ -100,14 +99,9 @@ object JarjarAbramsPlugin extends AutoPlugin {
           Tracked
             .inputChanged[HashFileInfo, Seq[(File, String)]](s.cacheStoreFactory.make("input")) {
               (changed: Boolean, in: HashFileInfo) =>
-                prev match {
-                  case None       => doMapping
-                  case Some(last) =>
-                    if (changed) doMapping
-                    else last
-                }
+                doMapping
             }
-        cachedMappings(FileInfo.hash(input))
+        ???
       },
       jarjarInputJar := {
         val libDep = jarjarLibraryDependency.value

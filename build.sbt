@@ -176,8 +176,15 @@ lazy val sbtplugin = project
       scriptedLaunchOpts.value ++
         Vector("-Xmx1024M", "-Dplugin.version=" + version.value)
     }
-    pluginCrossBuild / sbtVersion := "1.2.8"
-    scriptedSbt := "1.9.7"
+    crossScalaVersions += "3.7.3"
+    pluginCrossBuild / sbtVersion := {
+      scalaBinaryVersion.value match {
+        case "3" =>
+          "2.0.0-RC6"
+        case "2.12" =>
+          "1.11.7"
+      }
+    }
     scriptedBufferLog := false
   })
 
