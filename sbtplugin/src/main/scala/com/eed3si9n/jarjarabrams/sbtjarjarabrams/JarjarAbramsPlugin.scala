@@ -9,6 +9,8 @@ import Path.relativeTo
 import scala.xml.{ Comment, Elem, Node => XmlNode }
 import scala.xml.transform.{ RewriteRule, RuleTransformer }
 import java.nio.file.Files
+import sbtcompat.PluginCompat._
+import xsbti.FileConverter
 
 object JarjarAbramsPlugin extends AutoPlugin {
   object autoImport extends JarjarAbramsKeys {
@@ -58,7 +60,7 @@ object JarjarAbramsPlugin extends AutoPlugin {
       publishLocal := {
         reallyUpdateIvyXml.dependsOn(publishLocal).value
       },
-      deliverLocal := {
+      deliverLocal := Def.uncached {
         val scalaModuleInfoOpt = scalaModuleInfo.value
         val libDep = jarjarLibraryDependency.value
         val shadedModules0: Set[(String, String)] = Set(libDep).map { modId =>
@@ -73,42 +75,12 @@ object JarjarAbramsPlugin extends AutoPlugin {
   import JarjarAbramsInternalKeys._
   def baseSettings: Seq[Setting[?]] =
     Seq(
-      packageBin := jarjarPackageBin.value,
+      packageBin := Def.uncached(jarjarPackageBin.value),
       jarjarPackageBin / target := crossTarget.value / (prefix(
         configuration.value.name
       ) + "shaded"),
       jarjarPackageBin / logLevel := Level.Info,
-      jarjarPackageBinMappings := {
-        import sbt.util.CacheImplicits._
-        val s = streams.value
-        val input = jarjarInputJar.value
-        val prev = jarjarPackageBinMappings.previous
-        val dir = (jarjarPackageBin / target).value
-        val rules = jarjarShadeRules.value
-        val verbose = (jarjarPackageBin / logLevel).value == sbt.Level.Debug
-        def doMapping: Seq[(File, String)] = {
-          IO.delete(dir)
-          IO.createDirectory(dir)
-          IO.unzip(input, dir)
-          val mappings = ((dir ** "*").get() pair relativeTo(dir)) map { case (k, v) =>
-            k.toPath -> v
-          }
-          Shader.shadeDirectory(rules, dir.toPath, mappings, verbose)
-          (dir ** "*").get() pair relativeTo(dir)
-        }
-        val cachedMappings =
-          Tracked
-            .inputChanged[HashFileInfo, Seq[(File, String)]](s.cacheStoreFactory.make("input")) {
-              (changed: Boolean, in: HashFileInfo) =>
-                prev match {
-                  case None       => doMapping
-                  case Some(last) =>
-                    if (changed) doMapping
-                    else last
-                }
-            }
-        cachedMappings(FileInfo.hash(input))
-      },
+      jarjarPackageBinMappings := JarjarAbramsPluginCompat.jarjarPackageBinMappingsImpl.value,
       jarjarInputJar := {
         val libDep = jarjarLibraryDependency.value
         val ur = update.value
@@ -125,7 +97,7 @@ object JarjarAbramsPlugin extends AutoPlugin {
         }
         mr.artifacts.head._2
       },
-      externalDependencyClasspath := {
+      externalDependencyClasspath := Def.uncached {
         val input = jarjarInputJar.value
         val cp = externalDependencyClasspath.value
         cp filter { attr =>
@@ -134,20 +106,14 @@ object JarjarAbramsPlugin extends AutoPlugin {
       },
     ) ++ packageTaskSettings(jarjarPackageBin, jarjarPackageBinMappings) ++ Seq(
       jarjarPackageBin / artifactPath := {
-        val original = (jarjarPackageBin / artifactPath).value
-        original.getParentFile / s"shaded-${original.getName}"
-      },
-      jarjarPackageBin := {
-        val config = (jarjarPackageBin / packageConfiguration).value
-        val s = streams.value
-        Package(
-          config,
-          s.cacheStoreFactory,
-          s.log,
-          // sys.env.get("SOURCE_DATE_EPOCH").map(_.toLong * 1000).orElse(Some(0L))
+        @annotation.nowarn
+        implicit val converter: FileConverter = fileConverter.value
+        val original = virtualFileRefToFile((jarjarPackageBin / artifactPath).value)
+        fileToVirtualFileRef(
+          (original.getParentFile / s"shaded-${original.getName}")
         )
-        config.jar
-      }
+      },
+      jarjarPackageBin := JarjarAbramsPluginCompat.jarjarPackageBinImpl.value
     )
 
   def crossName(
@@ -159,7 +125,7 @@ object JarjarAbramsPlugin extends AutoPlugin {
       .flatMap(scalaInfo =>
         CrossVersion(crossVer, scalaInfo.scalaFullVersion, scalaInfo.scalaBinaryVersion)
       )
-      .getOrElse(identity[String] _)
+      .getOrElse((x: String) => x)
     transformName(modId.name)
   }
 
@@ -208,5 +174,21 @@ object JarjarAbramsPlugin extends AutoPlugin {
       log.info(s"Writing ivy.xml with shading at $baseFile")
       resolver.publish(artifact, baseFile, true)
     }
+  }
+
+  private[sbtjarjarabrams] def doMapping(
+      input: File,
+      dir: File,
+      rules: Seq[ShadeRule],
+      verbose: Boolean
+  ): Seq[(File, String)] = {
+    IO.delete(dir)
+    IO.createDirectory(dir)
+    IO.unzip(input, dir)
+    val mappings = ((dir ** "*").get() pair relativeTo(dir)) map { case (k, v) =>
+      k.toPath -> v
+    }
+    Shader.shadeDirectory(rules, dir.toPath, mappings, verbose)
+    (dir ** "*").get() pair relativeTo(dir)
   }
 }

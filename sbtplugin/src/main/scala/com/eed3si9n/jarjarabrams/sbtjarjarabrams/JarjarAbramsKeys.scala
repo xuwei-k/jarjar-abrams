@@ -2,6 +2,7 @@ package com.eed3si9n.jarjarabrams
 package sbtjarjarabrams
 
 import sbt._
+import sbtcompat.PluginCompat
 
 trait JarjarAbramsKeys {
   lazy val jarjarLibraryDependency = settingKey[ModuleID]("")
@@ -10,8 +11,11 @@ trait JarjarAbramsKeys {
 object JarjarAbramsKeys extends JarjarAbramsKeys
 
 trait JarjarAbramsInternalKeys {
-  lazy val jarjarPackageBin = taskKey[File]("")
-  lazy val jarjarPackageBinMappings = taskKey[Seq[(File, String)]]("")
+  @transient
+  lazy val jarjarPackageBin = taskKey[PluginCompat.FileRef]("")
+  @transient
+  lazy val jarjarPackageBinMappings = taskKey[Seq[(PluginCompat.FileRef, String)]]("")
+  @transient
   lazy val jarjarInputJar = taskKey[File]("")
 }
 object JarjarAbramsInternalKeys extends JarjarAbramsInternalKeys

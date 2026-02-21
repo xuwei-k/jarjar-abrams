@@ -109,21 +109,25 @@ lazy val jarjar_assembly = project
     Compile / packageBin := (jarjar / assembly).value
   })
 
-lazy val jarjar_abrams_assembly = project
+lazy val jarjar_abrams_assembly = projectMatrix
+  .defaultAxes(VirtualAxis.jvm)
+  .jvmPlatform(
+    Vector(scala212, scala213)
+  )
   .settings(nocomma {
-    crossScalaVersions := Vector(scala212, scala213)
     name := "jarjar-abrams-assembly"
-    Compile / packageBin := (core / assembly).value
+    Compile / packageBin := Def.settingDyn((core.jvm(scalaVersion.value) / assembly)).value
   })
 
-lazy val core = project
+lazy val core = projectMatrix
+  .defaultAxes(VirtualAxis.jvm)
+  .jvmPlatform(
+    Vector(scala212, scala213, scala3)
+  )
   .enablePlugins(ContrabandPlugin)
   .dependsOn(jarjar)
   .settings(nocomma {
     name := "jarjar-abrams-core"
-
-    crossScalaVersions := Vector(scala212, scala213, scala3)
-
     libraryDependencies ++= Vector(verify % Test)
     libraryDependencies ++= {
       scalaBinaryVersion.value match {
@@ -151,10 +155,18 @@ lazy val core = project
     }
 
     Compile / managedSourceDirectories += (Compile / generateContrabands / sourceManaged).value
-    Compile / generateContrabands / sourceManaged := baseDirectory.value / "src" / "main" / "contraband-scala"
+    Compile / generateContrabands / sourceManaged := projectMatrixBaseDirectory.value / "src" / "main" / "contraband-scala"
 
     testFrameworks += new TestFramework("verify.runner.Framework")
 
+    scalacOptions ++= {
+      scalaBinaryVersion.value match {
+        case "2.12" =>
+          Vector("-release:8")
+        case _ =>
+          Vector.empty
+      }
+    }
     Compile / scalacOptions += "-deprecation"
     Compile / scalacOptions ++= {
       if (scalaVersion.value.startsWith("2.13.")) Vector("-Xlint", "-Xsource:3")
@@ -164,20 +176,48 @@ lazy val core = project
     }
   })
 
-lazy val sbtplugin = project
+lazy val sbtplugin = projectMatrix
+  .defaultAxes(VirtualAxis.jvm)
+  .jvmPlatform(
+    Vector(scala212, scala3)
+  )
   .enablePlugins(SbtPlugin)
   .dependsOn(core)
   .settings(nocomma {
     name := "sbt-jarjar-abrams"
 
-    Compile / scalacOptions ++= Vector("-Xlint", "-Xfatal-warnings")
+    scalacOptions ++= Vector("-Werror")
+
+    scalacOptions ++= {
+      scalaBinaryVersion.value match {
+        case "2.12" =>
+          Vector("-Xlint", "-release:8")
+        case _ =>
+          Vector.empty
+      }
+    }
 
     scriptedLaunchOpts := {
       scriptedLaunchOpts.value ++
         Vector("-Xmx1024M", "-Dplugin.version=" + version.value)
     }
-    pluginCrossBuild / sbtVersion := "1.2.8"
-    scriptedSbt := "1.9.7"
+    addSbtPlugin("com.github.sbt" % "sbt2-compat" % "0.1.0")
+    pluginCrossBuild / sbtVersion := {
+      scalaBinaryVersion.value match {
+        case "2.12" =>
+          "1.5.8"
+        case _ =>
+          "2.0.0-RC12"
+      }
+    }
+    scriptedSbt := {
+      scalaBinaryVersion.value match {
+        case "2.12" =>
+          "1.9.7"
+        case _ =>
+          (pluginCrossBuild / sbtVersion).value
+      }
+    }
     scriptedBufferLog := false
   })
 
